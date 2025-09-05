@@ -1,4 +1,6 @@
 import kagglehub
+from torch.utils.data import random_split, DataLoader
+import torchvision.transforms as T
 
 # Download latest version
 path = kagglehub.dataset_download("ipythonx/retinal-vessel-segmentation")
@@ -37,7 +39,7 @@ class HRFDataset(Dataset):
         image_mask_map = []
 
         for img_name in self.image_names:
-            base_id = os.path.splitext(img_name)[0].lower() 
+            base_id = os.path.splitext(img_name)[0].lower()
 
             for mask_name in self.mask_names:
                 if os.path.splitext(mask_name)[0].lower() == base_id:
@@ -60,19 +62,22 @@ class HRFDataset(Dataset):
         image = Image.open(image_path).convert("RGB")
         mask = Image.open(mask_path).convert("L")
 
+        # Apply transforms to image
         if self.transform:
             image = self.transform(image)
-            mask = T.ToTensor()(mask)
-        else:
-            image = T.ToTensor()(image)
-            mask = T.ToTensor()(mask)
 
-        mask = (mask > 0).float() 
+        # Resize mask to match image
+        mask = T.Resize((224, 224))(mask)
+        mask = T.ToTensor()(mask)
+        mask = (mask > 0).float()  # Binary mask
 
         return image, mask
 
+
 hrf_images_dir = "/root/.cache/kagglehub/datasets/ipythonx/retinal-vessel-segmentation/versions/1/HRF/images"
 hrf_masks_dir = "/root/.cache/kagglehub/datasets/ipythonx/retinal-vessel-segmentation/versions/1/HRF/manual1"
+
+
 
 # Transforms
 transform = T.Compose([
@@ -88,7 +93,13 @@ hrf_dataset = HRFDataset(
     transform=transform
 )
 
-hrf_loader = DataLoader(hrf_dataset, batch_size=4, shuffle=True)
+train_size = int(0.8 * len(hrf_dataset))
+test_size = len(hrf_dataset) - train_size
+train_dataset, test_dataset = random_split(hrf_dataset, [train_size, test_size])
 
+# DataLoaders
+train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=4)
 
-
+print(f"Number of training samples: {len(train_dataset)}")
+print(f"Number of test samples: {len(test_dataset)}")
