@@ -308,4 +308,254 @@ def show_from_loader(model, loader, threshold=0.5, batch_idx=0):
 
 show_from_loader(model_G, test_loader, threshold=0.4, batch_idx=0)
 
+#----------------------------------EXPLAINABILITY---------------------------
+
+import torch
+
+#-----------1.Attention rollout---------------------
+def attention_rollout(attentions, discard_ratio=0.9):
+
+    num_layers = len(attentions)
+    batch_size, num_heads, tokens, _ = attentions[0].shape
+
+    att_mat = torch.stack(attentions) 
+    att_mat = att_mat.mean(dim=2) 
+
+    aug_att_mat = att_mat + torch.eye(tokens).to(att_mat.device)
+
+    aug_att_mat = aug_att_mat / aug_att_mat.sum(dim=-1, keepdim=True)
+
+    rollout = aug_att_mat[0]
+    for i in range(1, num_layers):
+        rollout = torch.bmm(rollout, aug_att_mat[i])
+
+    # get attention from CLS
+    mask = rollout[:, 0, 1:]  
+
+    return mask
+
+#--------------------2.GradCAM-----------------
+class ViTGradCAM:
+    def __init__(self, model, target_layer="vit_encoder.vit.encoder.layer.11.output"):
+        self.model = model
+        self.model.eval()
+        self.target_layer = dict([*model.named_modules()])[target_layer]
+        self.gradients = None
+
+        def save_gradient(module, grad_input, grad_output):
+            self.gradients = grad_output[0]
+
+        self.target_layer.register_forward_hook(self.forward_hook)
+        self.target_layer.register_backward_hook(save_gradient)
+
+    def forward_hook(self, module, input, output):
+        self.activations = output
+
+    def __call__(self, input_tensor):
+        self.model.zero_grad()
+        input_tensor = input_tensor.cuda()
+        output, attn = self.model(input_tensor, return_attn=True)
+        mask = output[0].mean()  
+        mask.backward()
+
+        gradients = self.gradients  
+        activations = self.activations  
+        pooled_gradients = gradients.mean(dim=1, keepdim=True) 
+        cam = (pooled_gradients * activations).sum(dim=2)  
+        cam = cam[:, 1:]
+        cam = cam.reshape(1, 14, 14)
+        cam = F.relu(cam)
+        cam = cam - cam.min()
+        cam = cam / cam.max()
+        return cam.squeeze().detach().cpu().numpy()
+
+
+#-------------Visualize Grad-CAM and Rollout Attention-----------
+def show_rollout_gradcam(model, loader):
+    model.eval()
+    for images, _ in loader:
+        images = images.cuda()
+        preds, attentions = model(images, return_attn=True)
+        rollout_mask = attention_rollout(attentions)
+
+        cam_extractor = ViTGradCAM(
+            model, target_layer="vit_encoder.vit.encoder.layer.11.output"
+        )
+
+        for i in range(min(4, images.size(0))):
+            img = images[i].detach().cpu().permute(1, 2, 0).numpy()
+            img = (img - img.min()) / (img.max() - img.min())
+
+            # Rollout
+            attn_map = rollout_mask[i].detach().cpu().reshape(14, 14).numpy()
+            attn_map = (attn_map - attn_map.min()) / (attn_map.max() - attn_map.min())
+            attn_map_resized = cv2.resize(attn_map, (img.shape[1], img.shape[0]))
+
+            # Grad-CAM
+            single_image = images[i].unsqueeze(0)
+            cam = cam_extractor(single_image) 
+            cam_resized = cv2.resize(cam, (img.shape[1], img.shape[0]))
+
+            plt.figure(figsize=(15, 5))
+
+            plt.subplot(1, 3, 1)
+            plt.title("Input Image")
+            plt.imshow(img)
+            plt.axis('off')
+
+            plt.subplot(1, 3, 2)
+            plt.title("Attention Rollout")
+            plt.imshow(img)
+            heatmap1 = plt.imshow(attn_map_resized, cmap='jet', alpha=0.5)
+            plt.axis('off')
+            cbar = plt.colorbar(heatmap1, fraction=0.046, pad=0.04)
+            cbar.set_label("Attention weight")
+
+            plt.subplot(1, 3, 3)
+            plt.title("Grad-CAM")
+            plt.imshow(img)
+            heatmap2 = plt.imshow(cam_resized, cmap='jet', alpha=0.5)
+            plt.axis('off')
+            cbar = plt.colorbar(heatmap2, fraction=0.046, pad=0.04)
+            cbar.set_label("Grad-CAM importance")
+
+            plt.tight_layout()
+            plt.show()
+
+        break
+
+show_rollout_gradcam(model_G, test_loader)
+
+
+#-------------------LIME---------------------
+!pip install lime
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+from lime import lime_image
+from skimage.segmentation import mark_boundaries
+import matplotlib.pyplot as plt
+from PIL import Image
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def predict_fn(images):
+    model_G.eval()
+    inputs = []
+    for img in images:  
+        img_pil = Image.fromarray(img)
+        inp = image_transform(img_pil)  
+        inputs.append(inp)
+    inputs = torch.stack(inputs).to(device)
+
+    with torch.no_grad():
+        outputs = model_G(inputs) 
+        probs = outputs.sigmoid().cpu().numpy()
+        return probs.reshape(len(images), -1).mean(axis=1).reshape(-1, 1)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def predict_fn(images):
+    model_G.eval()
+    inputs = []
+    for img in images:  
+        img_pil = Image.fromarray(img)
+        inp = image_transform(img_pil)  
+        inputs.append(inp)
+    inputs = torch.stack(inputs).to(device)
+
+    with torch.no_grad():
+        outputs = model_G(inputs) 
+        probs = outputs.sigmoid().cpu().numpy()
+        return probs.reshape(len(images), -1).mean(axis=1).reshape(-1, 1)
+
+
+# Highlight regions that positively contribute to vessel detection
+temp, mask = explanation.get_image_and_mask(
+    explanation.top_labels[0],
+    positive_only=True,
+    num_features=10,
+    hide_rest=False
+)
+
+plt.imshow(mark_boundaries(temp / 255.0, mask))
+plt.axis("off")
+plt.show()
+
+
+#---------------------SHAP--------------------
+!pip install shap
+import shap
+import torch
+import torch.nn as nn
+
+import torch
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+model_G.eval()
+
+class Wrapper(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def forward(self, x):
+        preds = self.model(x) 
+        probs = preds.sigmoid().mean(dim=[1,2,3])  
+        return probs.unsqueeze(1)  
+
+wrapped_model = Wrapper(model_G).to(device)
+
+images, masks = next(iter(test_loader))
+images = images.to(device)
+
+background = images[:3]
+
+explainer = shap.DeepExplainer(wrapped_model, background)
+
+shap_values = explainer.shap_values(images[:1])
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+batch_size = 3
+
+# Loop over all images in the batch
+for i in range(batch_size):
+    shap_img = shap_values[0][i]  
+    if shap_img.shape[0] == 3:
+        shap_img = np.transpose(shap_img, (1,2,0))  
+
+    orig_img = images[i].permute(1,2,0).detach().cpu().numpy()
+    orig_img = orig_img * 0.5 + 0.5  
+
+    heatmap = shap_img.mean(axis=-1)
+
+    #make original image whiter
+    alpha = 0.8
+    orig_light = orig_img * (1 - alpha) + alpha
+
+    # Plot SHAP heatmaps
+    plt.figure(figsize=(6,6))
+    plt.imshow(orig_light)
+    plt.imshow(heatmap, cmap="seismic", alpha=0.5)
+    plt.axis("off")
+    plt.show()
+
+    plt.figure(figsize=(10,5))
+    plt.subplot(1,2,1)
+    plt.title("Original")
+    plt.imshow(orig_img)
+    plt.axis("off")
+
+    plt.subplot(1,2,2)
+    plt.title("SHAP heatmap")
+    plt.imshow(orig_img)
+    plt.imshow(heatmap, cmap="seismic", alpha=0.5)
+    plt.axis("off")
+    plt.show()
 
