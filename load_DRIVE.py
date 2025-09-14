@@ -81,13 +81,13 @@ def visualize_sample(image_name, dataset_type='train'):
 
     plt.show()
 
-# Example
 image_name = '21_training.tif'
 visualize_sample(image_name, 'train')
 
 image_name = '01_test.tif'
 visualize_sample(image_name, 'test')
 
+# ------------------Create DRIVE Dataset----------------------
 import os
 from PIL import Image
 from torch.utils.data import Dataset
@@ -95,10 +95,11 @@ from torchvision import transforms
 import torch
 
 class DRIVEVesselDataset(Dataset):
-    def __init__(self, images_dir, masks_dir, transform=None):
+    def __init__(self, images_dir, masks_dir, image_transform=None, mask_transform=None):
         self.images_dir = images_dir
         self.masks_dir = masks_dir
-        self.transform = transform
+        self.image_transform = image_transform
+        self.mask_transform = mask_transform
         self.image_names = [f for f in os.listdir(images_dir) if f.endswith(".tif")]
 
     def __len__(self):
@@ -111,11 +112,42 @@ class DRIVEVesselDataset(Dataset):
         image = Image.open(os.path.join(self.images_dir, img_name)).convert("RGB")
         mask = Image.open(os.path.join(self.masks_dir, base_name + "_manual1.gif")).convert("L")
 
-        if self.transform:
-            image = self.transform(image)
-            mask = self.transform(mask)
+        if self.image_transform:
+            image = self.image_transform(image)
+        if self.mask_transform:
+            mask = self.mask_transform(mask)
 
         mask = (mask > 0).float()  
 
         return image, mask
 
+
+image_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
+])
+
+mask_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor()
+])
+from torch.utils.data import DataLoader
+
+
+train_dataset = DRIVEVesselDataset(
+    images_dir=train_images_dir,
+    masks_dir=train_vessel_masks_dir,
+    image_transform=image_transform,
+    mask_transform=mask_transform
+)
+
+test_dataset = DRIVEVesselDataset(
+    images_dir=test_images_dir,
+    masks_dir=test_vessel_masks_dir,
+    image_transform=image_transform,
+    mask_transform=mask_transform
+)
+
+train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=4, shuffle=False)
