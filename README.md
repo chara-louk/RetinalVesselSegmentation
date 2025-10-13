@@ -15,7 +15,7 @@ Experiments were conducted on three publicly available retinal vessel segmentati
 
 ### Baseline Models
 State-of-the-art models for retinal vessel segmentation were cloned from GitHub and Hugging Face for the experimental study. 
-- **U-Net** [Hugging Face](yasinelh/retinal_vessel_U-Net)
+- **U-Net** [Hugging Face][(yasinelh/retinal_vessel_U-Net)]
 - **SAU-Net** [Hugging Face](yasinelh/retinal_vessel_U-Net)
 - **BDCU-Net** [GitHub](https://github.com/rezazad68/BCDU-Net)
 
