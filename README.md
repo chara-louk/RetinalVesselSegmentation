@@ -63,7 +63,7 @@ The model was trained for 150 epochs with batch size 4. A combination of BCE and
 - **Loss weighting:** Real labels smoothed to 0.9, fake to 0.1 (label smoothing)  
 - **Losses combined:** Adversarial + Segmentation (BCE + Tversky)
 
-### Explainable AI (XAI)
+## Explainable AI (XAI)
 
 To enhance the interpretability and transparency of the proposed models, **XAI techniques** were applied to visualize and understand the regions of the retinal images most influential to the predictions. The following methods were used:
 
