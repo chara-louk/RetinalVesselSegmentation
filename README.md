@@ -74,3 +74,24 @@ To enhance the interpretability and transparency of the proposed models, **XAI t
 - **SHAP (SHapley Additive exPlanations):** Quantifies the contribution of each pixel to the final prediction, providing global and local interpretability.  The Python's library shap was used to implement the technique.
 
 ## Dependencies
+
+This project requires the following Python packages:
+
+- `torch` (PyTorch)
+- `torchvision`
+- `transformers`
+- `numpy`
+- `scikit-learn`
+- `matplotlib`
+- `Pillow`
+- `opencv-python`
+- `scikit-image`
+- `lime`
+- `shap`
+
+### Install via pip
+
+You can install all dependencies using pip:
+
+```bash
+pip install torch torchvision transformers numpy scikit-learn matplotlib Pillow opencv-python scikit-image lime shap
