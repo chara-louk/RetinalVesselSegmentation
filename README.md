@@ -77,7 +77,7 @@ To enhance the interpretability and transparency of the proposed models, **XAI t
 
 This project requires the following Python packages:
 
-- `torch` (PyTorch)
+- `torch` 
 - `torchvision`
 - `transformers`
 - `numpy`
