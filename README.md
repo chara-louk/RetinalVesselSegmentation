@@ -95,3 +95,17 @@ You can install all dependencies using pip:
 
 ```bash
 pip install torch torchvision transformers numpy scikit-learn matplotlib Pillow opencv-python scikit-image lime shap
+```
+## How to Run the Hybrid GAN model
+
+### 1. Prepare the dataset
+First, use the provided dataset loader scripts to create PyTorch datasets:
+
+- **DRIVE:** `load_DRIVE.py`  
+- **CHASE_DB1:** `load_CHASEDB.py`  
+- **HRF:** `load_HRF.py`  
+
+### 2. Run the model
+```bash
+python Hybrid-GAN.py
+```
