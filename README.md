@@ -73,3 +73,4 @@ To enhance the interpretability and transparency of the proposed models, **XAI t
 - **LIME (Local Interpretable Model-agnostic Explanations):** Generates pixel-level explanations by perturbing input images and observing changes in predictions. The Python's library lime was used to implement the technique. 
 - **SHAP (SHapley Additive exPlanations):** Quantifies the contribution of each pixel to the final prediction, providing global and local interpretability.  The Python's library shap was used to implement the technique.
 
+## Dependencies
